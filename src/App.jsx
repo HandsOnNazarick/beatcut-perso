@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import Dropzone from './components/Dropzone.jsx'
 import AudioAnalyzer from './components/AudioAnalyzer.jsx'
-import FilmSelector from './components/FilmSelector.jsx'
+import ArchiveFilmSelector from './components/ArchiveFilmSelector.jsx'
 import ClipSelector from './components/ClipSelector.jsx'
 import ExportPanel from './components/ExportPanel.jsx'
 
@@ -39,23 +39,28 @@ export default function App() {
     }
   }
 
-  const toggleFilm = (film) => {
-    setSelectedFilms((prev) => {
-      const exists = prev.some((f) => f.id === film.id)
-      if (exists) return prev.filter((f) => f.id !== film.id)
-      return [...prev, film]
+  const handleSelectFilm = (filmWithVideo) => {
+    // Archive.org renvoie directement le fichier vidéo à utiliser comme clip
+    // On l'ajoute directement à la sélection de clips (étape 3)
+    const clipFromFilm = {
+      id: `archive-${filmWithVideo.id}-${filmWithVideo.videoUrl.split('/').pop()}`,
+      title: `${filmWithFilm.title} — ${filmWithVideo.videoUrl.split('/').pop()}`,
+      url: filmWithVideo.videoUrl,
+      duration: filmWithVideo.duration || 60,
+      mood: filmWithVideo.mood || 'film',
+      source: 'Archive.org',
+    }
+
+    setSelectedFilms((prev) => [...prev, filmWithVideo])
+    setSelectedClips((prev) => {
+      const exists = prev.some((c) => c.id === clipFromFilm.id)
+      if (exists) return prev
+      return [...prev, clipFromFilm]
     })
-    // Met à jour le thème basé sur le premier film sélectionné
-    if (selectedFilms.length === 0 && film.overview) {
-      // Heuristique : extrait un mot-clé de mood depuis l'overview
-      const lower = film.overview.toLowerCase()
-      let mood = ''
-      if (lower.includes('nuit') || lower.includes('noir')) mood = 'nuit'
-      else if (lower.includes('amour') || lower.includes('romance')) mood = 'estival'
-      else if (lower.includes('hiver') || lower.includes('cold')) mood = 'froid'
-      else if (lower.includes('mer') || lower.includes('océan')) mood = 'océan'
-      else if (lower.includes('ville') || lower.includes('city')) mood = 'urbain'
-      if (mood) setTheme(mood)
+
+    // Met à jour le thème si on a un mood depuis le film
+    if (filmWithVideo.mood) {
+      setTheme(filmWithVideo.mood)
     }
   }
 
@@ -105,7 +110,7 @@ export default function App() {
                 Transforme tes sons en vidéos calées sur le beat
               </div>
               <div style={{ fontSize: 12 }}>
-                Drop ton MP3 → BPM auto → choisis ton film / clips → exporte en 9:16
+                Drop ton MP3 → BPM auto → choisis ton film (Archive.org, libre) ou tes clips → exporte en 9:16
               </div>
             </div>
           </div>
@@ -121,9 +126,9 @@ export default function App() {
             </section>
 
             <section className="section">
-              <FilmSelector
+              <ArchiveFilmSelector
                 selectedFilms={selectedFilms}
-                onToggle={toggleFilm}
+                onSelect={handleSelectFilm}
               />
             </section>
 
