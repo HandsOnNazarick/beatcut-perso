@@ -1,0 +1,26 @@
+{
+  "name": "beatcut-perso",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "homepage": "https://alaza.github.io/beatcut-perso/",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "wavesurfer.js": "^7.8.6",
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1",
+    "web-audio-beat-detector": "^8.2.10"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0",
+    "gh-pages": "^6.1.1"
+  }
+}
