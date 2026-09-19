@@ -282,45 +282,114 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
 
         {showKeys && (
           <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
-            <div style={{ fontSize: 11, marginBottom: 8 }}>
-              <a href="https://opensubtitles.com/consumers" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                OpenSubtitles →
-              </a> clé gratuite
-            </div>
-            <input
-              type="password"
-              value={osKey}
-              onChange={(e) => setOsKey(e.target.value)}
-              placeholder="OpenSubtitles API key"
-              style={{ width: '100%', marginBottom: 8, fontSize: 11 }}
-            />
-            <div style={{ fontSize: 11, marginBottom: 8 }}>
-              <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                YouTube Data API →
+            {/* Step 1: OpenSubtitles */}
+            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                ① OpenSubtitles <span style={{ color: isOSConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isOSConfigured ? '✓' : '○'}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                1. Ouvre ce lien dans un nouvel onglet
+              </div>
+              <a
+                href="https://www.opensubtitles.com/en/consumers"
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: 8, fontSize: 11, padding: '8px' }}
+              >
+                🔗 Créer compte + clé →
               </a>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                2. Copie ta clé API ci-dessous
+              </div>
+              <input
+                type="password"
+                value={osKey}
+                onChange={(e) => setOsKey(e.target.value)}
+                placeholder="Colle ta clé ici"
+                style={{ width: '100%', fontSize: 11 }}
+              />
             </div>
-            <input
-              type="password"
-              value={ytKey}
-              onChange={(e) => setYtKey(e.target.value)}
-              placeholder="YouTube API key"
-              style={{ width: '100%', marginBottom: 8, fontSize: 11 }}
-            />
-            <div style={{ fontSize: 11, marginBottom: 8 }}>
-              <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
-                OpenRouter →
+
+            {/* Step 2: YouTube */}
+            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                ② YouTube Data API <span style={{ color: isYTConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isYTConfigured ? '✓' : '○'}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                1. Ouvre la console Google, crée un projet, active l'API
+              </div>
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: 4, fontSize: 11, padding: '8px' }}
+              >
+                🔗 Console Google →
               </a>
+              <a
+                href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: 10, color: 'var(--accent)', display: 'block', marginBottom: 8, textAlign: 'center' }}
+              >
+                Activer YouTube Data API v3 →
+              </a>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                2. Crée une clé API et colle-la ci-dessous
+              </div>
+              <input
+                type="password"
+                value={ytKey}
+                onChange={(e) => setYtKey(e.target.value)}
+                placeholder="Colle ta clé ici"
+                style={{ width: '100%', fontSize: 11 }}
+              />
             </div>
-            <input
-              type="password"
-              value={orKey}
-              onChange={(e) => setOrKey(e.target.value)}
-              placeholder="OpenRouter API key"
-              style={{ width: '100%', marginBottom: 8, fontSize: 11 }}
-            />
-            <button className="btn btn-primary" onClick={saveKeys} style={{ width: '100%', fontSize: 12 }}>
-              Sauvegarder les clés
+
+            {/* Step 3: OpenRouter */}
+            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                ③ OpenRouter <span style={{ color: isORConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isORConfigured ? '✓' : '○'}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                1. Login (Google/GitHub), crée une clé gratuite
+              </div>
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: 8, fontSize: 11, padding: '8px' }}
+              >
+                🔗 OpenRouter Keys →
+              </a>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+                2. Copie la clé (commence par sk-or-v1-)
+              </div>
+              <input
+                type="password"
+                value={orKey}
+                onChange={(e) => setOrKey(e.target.value)}
+                placeholder="sk-or-v1-..."
+                style={{ width: '100%', fontSize: 11 }}
+              />
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={saveKeys}
+              style={{ width: '100%' }}
+              disabled={!osKey || !ytKey || !orKey}
+            >
+              Sauvegarder ({[isOSConfigured, isYTConfigured, isORConfigured].filter(Boolean).length}/3)
             </button>
+            {(!osKey || !ytKey || !orKey) && (
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
+                Configure les 3 clés pour activer l'IA
+              </div>
+            )}
           </div>
         )}
       </div>
