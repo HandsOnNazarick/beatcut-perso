@@ -1,7 +1,7 @@
 {
   "name": "beatcut-perso",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "homepage": "https://alaza.github.io/beatcut-perso/",
   "scripts": {
@@ -14,10 +14,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "wavesurfer.js": "^7.8.6",
-    "@ffmpeg/ffmpeg": "^0.12.10",
-    "@ffmpeg/util": "^0.12.1",
     "web-audio-beat-detector": "^8.2.10",
-    "@xenova/transformers": "^2.17.2"
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

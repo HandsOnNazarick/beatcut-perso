@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import Dropzone from './components/Dropzone.jsx'
 import AudioAnalyzer from './components/AudioAnalyzer.jsx'
-import IntelligentFilmMatcher from './components/IntelligentFilmMatcher.jsx'
 import ClipSelector from './components/ClipSelector.jsx'
 import ExportPanel from './components/ExportPanel.jsx'
 
@@ -12,7 +11,6 @@ export default function App() {
   const [beats, setBeats] = useState([])
   const [duration, setDuration] = useState(0)
   const [selectedClips, setSelectedClips] = useState([])
-  const [theme, setTheme] = useState(null)
 
   const handleAudioFile = (file) => {
     setAudioFile(file)
@@ -25,15 +23,6 @@ export default function App() {
   const handleBPMChange = (newBPM, source) => {
     setBpm(newBPM)
     setBpmSource(source)
-    if (!theme) {
-      let guess = ''
-      if (newBPM < 90) guess = 'mélancolique'
-      else if (newBPM < 110) guess = 'froid'
-      else if (newBPM < 130) guess = 'estival'
-      else if (newBPM < 150) guess = 'urbain'
-      else guess = 'néon'
-      setTheme(guess)
-    }
   }
 
   const toggleClip = (clip) => {
@@ -50,7 +39,6 @@ export default function App() {
     setBpmSource(null)
     setBeats([])
     setSelectedClips([])
-    setTheme(null)
     setDuration(0)
   }
 
@@ -61,7 +49,7 @@ export default function App() {
           <div className="app-title-logo">B</div>
           <div>
             <div>BeatCut Perso</div>
-            <div className="app-subtitle">Clone local · 100% dans le navigateur</div>
+            <div className="app-subtitle">100% local · aucune clé API</div>
           </div>
         </div>
         {audioFile && (
@@ -81,7 +69,10 @@ export default function App() {
                 Transforme tes sons en vidéos calées sur le beat
               </div>
               <div style={{ fontSize: 12 }}>
-                Drop ton MP3 → BPM auto → choisis tes clips (style ciné) → exporte en 9:16
+                Drop ton son → BPM auto → choisis tes clips → exporte en 9:16
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
+                💡 Pour de vrais visuels sur iPhone, upload tes propres rushs dans "Mes clips"
               </div>
             </div>
           </div>
@@ -97,19 +88,9 @@ export default function App() {
             </section>
 
             <section className="section">
-              <IntelligentFilmMatcher
-                audioFile={audioFile}
-                bpm={bpm}
-                duration={duration}
-                onSelectClips={setSelectedClips}
-              />
-            </section>
-
-            <section className="section">
               <ClipSelector
                 selectedClips={selectedClips}
                 onToggle={toggleClip}
-                theme={theme}
               />
             </section>
 
@@ -127,7 +108,7 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        BeatCut Perso · 100% local · tes sons ne quittent jamais ton navigateur
+        BeatCut Perso · 100% local · aucune clé API nécessaire
         {bpm && audioFile && (
           <> · BPM {bpm} <span className={`bpm-source ${bpmSource}`} style={{ marginLeft: 4 }}>{bpmSource}</span></>
         )}

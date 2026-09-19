@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { getStarterClips, findClipsByMood, findClipsByFilmRef } from '../modules/clips.js'
 import Dropzone from './Dropzone.jsx'
-import StockClipSearch from './StockClipSearch.jsx'
 
 // Sélecteur de clips : Pexels (banque ciné-look) + upload perso
 // Les clips sont taggés avec des références cinéphiles ("Style Drive", "Style Lost in Translation"...)
@@ -84,12 +83,6 @@ export default function ClipSelector({ selectedClips, onToggle, theme }) {
           onClick={() => setTab('starter')}
         >
           🎬 Banque ciné ({getStarterClips().length})
-        </button>
-        <button
-          className={`toggle-btn ${tab === 'search' ? 'active' : ''}`}
-          onClick={() => setTab('search')}
-        >
-          🔍 Pexels + Pixabay
         </button>
         <button
           className={`toggle-btn ${tab === 'custom' ? 'active' : ''}`}
@@ -248,10 +241,6 @@ export default function ClipSelector({ selectedClips, onToggle, theme }) {
             </div>
           )}
         </>
-      )}
-
-      {tab === 'search' && (
-        <StockClipSearch onSelect={(clip) => onToggle(clip)} />
       )}
     </div>
   )
