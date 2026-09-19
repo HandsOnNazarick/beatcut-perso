@@ -78,10 +78,10 @@ export default function IntelligentFilmMatcher({
       const transcription = await whisperModule.transcribe(audioFile, (status, pct) => {
         if (status === 'downloading') {
           addLog(`⬇ Téléchargement modèle : ${pct}%`)
-          setProgress(pct * 0.2) // 0-20%
+          setProgress(pct * 0.3) // 0-30%
         } else if (status === 'transcribing') {
           addLog('🎵 Transcription en cours...')
-          setProgress(20 + pct * 0.3) // 20-50%
+          setProgress(30 + pct * 0.4) // 30-70%
         }
       })
       setIsWhisperCached(true)
@@ -98,7 +98,7 @@ export default function IntelligentFilmMatcher({
       // === ÉTAPE 2 : Détection du thème via LLM ===
       setStep('matching')
       addLog('🎨 Analyse du thème via IA...')
-      setProgress(55)
+      setProgress(75)
 
       const llmModule = await import('../modules/llm.js')
       let theme = { theme: 'mélancolique', emotion: 'contemplatif', visualKeywords: [] }
@@ -109,145 +109,105 @@ export default function IntelligentFilmMatcher({
         addLog(`⚠ Détection thème échouée : ${e.message}`, 'error')
       }
 
-      // === ÉTAPE 3 : Matching OpenSubtitles ===
+      // === ÉTAPE 3 : Recommandation de clips via LLM (sans OpenSubtitles/YouTube) ===
       setStep('finding')
-      addLog('🔍 Recherche de correspondances dans les sous-titres...')
-      setProgress(65)
+      addLog('🎬 Génération des recommandations de clips...')
+      setProgress(85)
 
-      const subsModule = await import('../modules/subtitles.js')
-      const candidates = []
-
-      for (const phrase of phrases.slice(0, 3)) {
-        try {
-          addLog(`   → "${phrase.text.slice(0, 50)}..."`)
-          const searchResult = await subsModule.searchSubtitles(phrase.text, ['fre', 'eng'])
-
-          const topSubs = (searchResult.data || []).slice(0, 5)
-          for (const sub of topSubs) {
-            const movieTitle = sub.attributes?.release || sub.attributes?.feature_details?.movie_name
-            const movieYear = sub.attributes?.feature_details?.movie_release_year
-
-            if (!movieTitle) continue
-
-            // Télécharge et parse le sous-titre (via proxy ou direct)
-            try {
-              let dlData
-              if (useProxy) {
-                const dl = await fetch(`${proxyUrl}/subtitles/download`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ file_id: sub.attributes?.files?.[0]?.file_id }),
-                })
-                dlData = await dl.json()
-              } else {
-                const dl = await fetch('https://api.opensubtitles.com/api/v1/download', {
-                  method: 'POST',
-                  headers: {
-                    'Api-Key': osKey,
-                    'User-Agent': 'BeatCutPerso v0.1',
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({ file_id: sub.attributes?.files?.[0]?.file_id }),
-                })
-                dlData = await dl.json()
-              }
-
-              if (dlData.link) {
-                const srtRes = await fetch(dlData.link)
-                const srtText = await srtRes.text()
-                const cues = subsModule.parseSRT(srtText)
-                const matches = subsModule.findBestMatches(phrase.text, cues, 1, 0.5)
-
-                if (matches.length > 0) {
-                  const match = matches[0]
-                  candidates.push({
-                    phraseId: phrase.text,
-                    movieTitle,
-                    movieYear,
-                    quote: match.text,
-                    timestamp: match.startSec,
-                    matchScore: match.score,
-                  })
-                  addLog(`   ✓ ${movieTitle} : "${match.text.slice(0, 40)}..." (${Math.round(match.startSec)}s)`, 'success')
-                }
-              }
-            } catch (e) {
-              addLog(`   ⚠ Skip ${movieTitle} : ${e.message}`, 'error')
-            }
-
-            if (candidates.length >= 8) break
-          }
-        } catch (e) {
-          addLog(`   ⚠ Recherche échouée : ${e.message}`, 'error')
-        }
-        if (candidates.length >= 8) break
-      }
-
-      addLog(`✓ ${candidates.length} candidats trouvés`, 'success')
-      setProgress(80)
-
-      // === ÉTAPE 4 : Recherche YouTube ===
-      addLog('🎬 Recherche des scènes sur YouTube...')
-
-      const ytModule = await import('../modules/youtube.js')
-      for (const cand of candidates) {
-        try {
-          const ytResults = await ytModule.searchVideo(
-            `${cand.movieTitle} ${cand.movieYear || ''} ${cand.quote}`.trim(),
-            1
-          )
-          if (ytResults.length > 0) {
-            cand.youtube = {
-              id: ytResults[0].id,
-              title: ytResults[0].title,
-              url: `https://www.youtube.com/watch?v=${ytResults[0].id}&t=${Math.floor(cand.timestamp)}s`,
-              thumbnail: ytResults[0].thumbnail,
-            }
-          }
-        } catch (e) {
-          addLog(`   ⚠ YouTube ${cand.movieTitle} : ${e.message}`, 'error')
-        }
-      }
-
-      setProgress(90)
-
-      // === ÉTAPE 5 : Tri final via LLM ===
-      setStep('ranking')
-      addLog('🧠 Tri final par IA...')
-
-      let selections = candidates.map((_, i) => ({ index: i, reason: 'Auto-sélection' }))
+      // On demande au LLM de suggérer des films/scènes qui matchent le thème
+      let recommendations = []
       try {
-        const llmResult = await llmModule.callLLM(`Tu es directeur artistique. Sélectionne les 5 meilleurs clips pour cette musique.
+        const prompt = `Tu es directeur artistique pour clips musicaux TikTok.
 
-Paroles : "${transcription.text.slice(0, 300)}"
+Paroles de la musique :
+"${transcription.text}"
 
-Candidats :
-${candidates.map((c, i) => `${i + 1}. ${c.movieTitle} (${c.movieYear || '?'}) - "${c.quote}" à ${Math.round(c.timestamp)}s`).join('\n')}
+Thème détecté : ${theme.theme} (${theme.emotion})
 
-Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
+Tâche : suggère 5 films ou séries dont l'esthétique/ambiance matche avec ces paroles et ce thème.
+Pour chaque suggestion, donne :
+- Titre du film
+- Année
+- Description courte de l'ambiance (1 phrase)
+- Une scène/iconique qui pourrait servir de clip
 
-        const jsonMatch = llmResult.match(/\{[\s\S]*\}/)
+Réponds UNIQUEMENT avec un JSON valide (rien autour) :
+{
+  "recommendations": [
+    {
+      "title": "...",
+      "year": ...,
+      "description": "...",
+      "iconicScene": "..."
+    },
+    ...
+  ]
+}`
+
+        const response = await llmModule.callLLM(prompt, {
+          temperature: 0.8,
+          max_tokens: 800,
+        })
+
+        const jsonMatch = response.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0])
-          if (parsed.selections) selections = parsed.selections
+          recommendations = (parsed.recommendations || []).slice(0, 5).map((rec, i) => ({
+            movieTitle: rec.title,
+            movieYear: rec.year,
+            phraseId: phrases[0]?.text || '',
+            quote: rec.iconicScene || rec.description,
+            timestamp: 0,
+            matchScore: 0.85 - i * 0.05,
+            reasoning: rec.description,
+            youtube: null, // Pas de YouTube en mode simple
+          }))
         }
       } catch (e) {
-        addLog(`⚠ Tri LLM échoué, fallback sur tri par score`, 'error')
+        addLog(`⚠ Recommandations LLM échouées : ${e.message}`, 'error')
       }
 
-      const finalClips = selections
-        .map((s) => candidates[s.index - 1] || candidates[s.index])
-        .filter(Boolean)
+      if (recommendations.length === 0) {
+        // Fallback : recommandations hardcodées basées sur le thème
+        const FALLBACK_BY_THEME = {
+          'mélancolique': ['Lost in Translation', 'Her', 'Eternal Sunshine', 'Moonlight', 'Past Lives'],
+          'amour': ['Call Me By Your Name', 'La La Land', 'In the Mood for Love', 'Eternal Sunshine', 'Normal People'],
+          'festif': ['Mamma Mia', 'La La Land', 'The Greatest Showman', 'Eurovision', 'Pitch Perfect'],
+          'sombre': ['Blade Runner 2049', 'Joker', 'The Batman', 'Se7en', 'No Country for Old Men'],
+          'énergique': ['Baby Driver', 'Mad Max Fury Road', 'John Wick', 'The Fall Guy', 'Top Gun'],
+          'nuit': ['Drive', 'Blade Runner', 'Taxi Driver', 'After Hours', 'Eyes Wide Shut'],
+          'ville': ['Lost in Translation', 'Her', 'Taxi Driver', 'Birdman', 'Collateral'],
+          'nature': ['Into the Wild', 'Wild', 'Nomadland', 'The Revenant', 'Grizzly Man'],
+        }
+        const themeKey = (theme.theme || '').toLowerCase()
+        const films = FALLBACK_BY_THEME[themeKey] || FALLBACK_BY_THEME['mélancolique']
+        recommendations = films.slice(0, 5).map((title, i) => ({
+          movieTitle: title,
+          movieYear: '?',
+          phraseId: phrases[0]?.text || '',
+          quote: `Scène emblématique de ${title}`,
+          timestamp: 0,
+          matchScore: 0.8 - i * 0.05,
+          reasoning: `Match mood (${theme.theme})`,
+          youtube: null,
+        }))
+        addLog(`ℹ Fallback : 5 films recommandés pour le thème "${theme.theme}"`, 'success')
+      } else {
+        addLog(`✓ ${recommendations.length} films recommandés`, 'success')
+      }
+
+      setProgress(95)
 
       setResult({
         transcription,
         theme,
         phrases,
-        candidates,
-        finalClips,
+        candidates: recommendations,
+        finalClips: recommendations,
+        isSimpleMode: true, // pour l'UI
       })
 
-      addLog(`🎉 Terminé ! ${finalClips.length} clips recommandés`, 'success')
+      addLog(`🎉 Terminé ! ${recommendations.length} films recommandés`, 'success')
       setStep('done')
       setProgress(100)
     } catch (e) {
@@ -306,39 +266,60 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
 
       {/* Configuration proxy (recommandé) ou clés API */}
       <div style={{ marginBottom: 16 }}>
-        {/* Mode proxy */}
+        {/* Clé OpenRouter directe (mode simple) */}
         <div style={{
           padding: 12,
-          background: useProxy ? 'rgba(74, 222, 128, 0.1)' : 'var(--bg-tertiary)',
+          background: orKey ? 'rgba(74, 222, 128, 0.1)' : 'var(--bg-tertiary)',
           borderRadius: 8,
           marginBottom: 12,
-          border: useProxy ? '1px solid var(--success)' : '1px solid var(--border)',
+          border: orKey ? '1px solid var(--success)' : '1px solid var(--border)',
         }}>
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-            🚀 Mode Proxy
-            <span className="tag auto">Recommandé</span>
-            {useProxy && <span style={{ color: 'var(--success)', fontSize: 11 }}>✓ Actif</span>}
+            🔑 Clé OpenRouter <span className="tag auto">Direct</span>
+            {orKey && <span style={{ color: 'var(--success)', fontSize: 11 }}>✓ Configurée</span>}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-            Si tu as déployé le proxy Cloudflare Workers, colle son URL ici. Zéro clé API nécessaire.
+            Colle ta clé OpenRouter (commence par sk-or-v1-). Stockée uniquement en local.
+            <br />
+            <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+              → Créer une clé sur openrouter.ai/keys
+            </a>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
-              type="text"
-              value={proxyInput}
-              onChange={(e) => setProxyInput(e.target.value)}
-              placeholder="https://beatcut-ia-proxy.xxx.workers.dev"
+              type="password"
+              value={orKey}
+              onChange={(e) => setOrKey(e.target.value)}
+              placeholder="sk-or-v1-..."
               style={{ flex: 1, fontSize: 11 }}
             />
-            {useProxy ? (
-              <button className="btn btn-secondary" onClick={clearProxy} style={{ fontSize: 11, padding: '8px 12px' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                localStorage.setItem('beatcut:or_key', orKey)
+                setShowKeys(false)
+              }}
+              style={{ fontSize: 11, padding: '8px 12px' }}
+            >
+              OK
+            </button>
+            {orKey && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setOrKey('')
+                  localStorage.removeItem('beatcut:or_key')
+                }}
+                style={{ fontSize: 11, padding: '8px 12px' }}
+              >
                 ✕
               </button>
-            ) : (
-              <button className="btn btn-primary" onClick={saveProxy} style={{ fontSize: 11, padding: '8px 12px' }}>
-                OK
-              </button>
             )}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+            ⚠️ OpenSubtitles et YouTube sont skippés pour l'instant.
+            Le matching de scènes et la recherche YouTube seront ajoutés plus tard.
+            Pour l'instant, l'IA utilise uniquement le LLM sur tes paroles.
           </div>
         </div>
 
@@ -347,119 +328,36 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
           onClick={() => setShowKeys(!showKeys)}
           style={{ width: '100%', fontSize: 12 }}
         >
-          {showKeys ? '▼' : '▶'} {useProxy ? 'Voir les clés manuelles (info)' : `Clés API manuelles ${allKeysConfigured ? '✓' : ''}`}
+          {showKeys ? '▼' : '▶'} Mode avancé (proxy / sous-titres / YouTube)
         </button>
 
         {showKeys && (
           <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
-            {/* Step 1: OpenSubtitles */}
-            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                ① OpenSubtitles <span style={{ color: isOSConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isOSConfigured ? '✓' : '○'}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                1. Ouvre ce lien dans un nouvel onglet
-              </div>
-              <a
-                href="https://www.opensubtitles.com/en/consumers"
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-primary"
-                style={{ width: '100%', marginBottom: 8, fontSize: 11, padding: '8px' }}
-              >
-                🔗 Créer compte + clé →
-              </a>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                2. Copie ta clé API ci-dessous
-              </div>
-              <input
-                type="password"
-                value={osKey}
-                onChange={(e) => setOsKey(e.target.value)}
-                placeholder="Colle ta clé ici"
-                style={{ width: '100%', fontSize: 11 }}
-              />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              💡 Mode avancé (optionnel) — pour utilisateurs qui veulent le matching complet phrases ↔ films ↔ YouTube.
+              Pas nécessaire pour ton usage.
             </div>
-
-            {/* Step 2: YouTube */}
-            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                ② YouTube Data API <span style={{ color: isYTConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isYTConfigured ? '✓' : '○'}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                1. Ouvre la console Google, crée un projet, active l'API
-              </div>
-              <a
-                href="https://console.cloud.google.com/apis/credentials"
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-primary"
-                style={{ width: '100%', marginBottom: 4, fontSize: 11, padding: '8px' }}
-              >
-                🔗 Console Google →
-              </a>
-              <a
-                href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: 10, color: 'var(--accent)', display: 'block', marginBottom: 8, textAlign: 'center' }}
-              >
-                Activer YouTube Data API v3 →
-              </a>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                2. Crée une clé API et colle-la ci-dessous
-              </div>
+            {/* Mode proxy */}
+            <div style={{ marginBottom: 12 }}>
               <input
-                type="password"
-                value={ytKey}
-                onChange={(e) => setYtKey(e.target.value)}
-                placeholder="Colle ta clé ici"
-                style={{ width: '100%', fontSize: 11 }}
+                type="text"
+                value={proxyInput}
+                onChange={(e) => setProxyInput(e.target.value)}
+                placeholder="URL proxy Cloudflare Workers (optionnel)"
+                style={{ width: '100%', fontSize: 11, marginBottom: 4 }}
               />
+              <div style={{ display: 'flex', gap: 6 }}>
+                {useProxy ? (
+                  <button className="btn btn-secondary" onClick={clearProxy} style={{ fontSize: 10, padding: '4px 8px' }}>
+                    ✕ Proxy actif
+                  </button>
+                ) : (
+                  <button className="btn btn-primary" onClick={saveProxy} style={{ fontSize: 10, padding: '4px 8px' }}>
+                    Activer proxy
+                  </button>
+                )}
+              </div>
             </div>
-
-            {/* Step 3: OpenRouter */}
-            <div style={{ marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                ③ OpenRouter <span style={{ color: isORConfigured ? 'var(--success)' : 'var(--text-muted)' }}>{isORConfigured ? '✓' : '○'}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                1. Login (Google/GitHub), crée une clé gratuite
-              </div>
-              <a
-                href="https://openrouter.ai/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-primary"
-                style={{ width: '100%', marginBottom: 8, fontSize: 11, padding: '8px' }}
-              >
-                🔗 OpenRouter Keys →
-              </a>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-                2. Copie la clé (commence par sk-or-v1-)
-              </div>
-              <input
-                type="password"
-                value={orKey}
-                onChange={(e) => setOrKey(e.target.value)}
-                placeholder="sk-or-v1-..."
-                style={{ width: '100%', fontSize: 11 }}
-              />
-            </div>
-
-            <button
-              className="btn btn-primary"
-              onClick={saveKeys}
-              style={{ width: '100%' }}
-              disabled={!osKey || !ytKey || !orKey}
-            >
-              Sauvegarder ({[isOSConfigured, isYTConfigured, isORConfigured].filter(Boolean).length}/3)
-            </button>
-            {(!osKey || !ytKey || !orKey) && (
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
-                Configure les 3 clés pour activer l'IA
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -544,8 +442,10 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
                   "{clip.quote.slice(0, 80)}..."
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                  ⏱ {Math.floor(clip.timestamp / 60)}:{String(Math.floor(clip.timestamp % 60)).padStart(2, '0')} ·
-                  Match: {Math.round(clip.matchScore * 100)}%
+                  {clip.timestamp > 0 ? (
+                    <>⏱ {Math.floor(clip.timestamp / 60)}:{String(Math.floor(clip.timestamp % 60)).padStart(2, '0')} · </>
+                  ) : null}
+                  {clip.reasoning || `Match: ${Math.round(clip.matchScore * 100)}%`}
                 </div>
                 {clip.youtube ? (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -567,8 +467,25 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
                     </button>
                   </div>
                 ) : (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    Pas de vidéo YouTube trouvée pour cette scène
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(`${clip.movieTitle} ${clip.movieYear || ''} iconic scene clip`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: '6px 10px' }}
+                    >
+                      🔍 Chercher "{clip.movieTitle}" sur Google
+                    </a>
+                    <a
+                      href={`https://www.imdb.com/find?q=${encodeURIComponent(clip.movieTitle)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-ghost"
+                      style={{ fontSize: 11, padding: '6px 10px' }}
+                    >
+                      🎬 IMDb
+                    </a>
                   </div>
                 )}
               </div>
@@ -576,8 +493,9 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
           </div>
 
           <div style={{ marginTop: 16, fontSize: 11, color: 'var(--text-muted)' }}>
-            ℹ️ Les scènes s'ouvrent sur YouTube. Pour les intégrer à ton clip :
-            <br />• Sur iPhone : screen-record la portion qui t'intéresse, puis upload dans "Mes clips"
+            💡 Ces recommandations viennent de l'IA basée sur tes paroles.
+            <br />• Click sur un film → Google/IMDb pour trouver la scène
+            <br />• Sur iPhone : screen-record la portion, puis upload dans "Mes clips"
             <br />• Sur desktop : utilise yt-dlp ou une extension de download
           </div>
         </div>
