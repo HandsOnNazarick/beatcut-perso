@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import Dropzone from './components/Dropzone.jsx'
 import AudioAnalyzer from './components/AudioAnalyzer.jsx'
+import IntelligentFilmMatcher from './components/IntelligentFilmMatcher.jsx'
 import ClipSelector from './components/ClipSelector.jsx'
 import ExportPanel from './components/ExportPanel.jsx'
 
@@ -92,6 +93,15 @@ export default function App() {
                 onBPMChange={handleBPMChange}
                 onBeatsChange={setBeats}
                 onDurationChange={setDuration}
+              />
+            </section>
+
+            <section className="section">
+              <IntelligentFilmMatcher
+                audioFile={audioFile}
+                bpm={bpm}
+                duration={duration}
+                onSelectClips={setSelectedClips}
               />
             </section>
 
