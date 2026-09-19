@@ -67,28 +67,58 @@ export async function exportVideoCanvas(opts) {
     }
   }
 
-  // Configure MediaRecorder sur le canvas
-  const stream = canvas.captureStream(30)
+  // Charge l'audio pour le jouer en sync
+  const audioUrl = URL.createObjectURL(audioFile)
+  const audioEl = new Audio(audioUrl)
+  audioEl.muted = false
+  audioEl.crossOrigin = 'anonymous'
+
+  // Crée un MediaStream combiné : vidéo canvas + audio du <audio>
+  // C'est la SEULE façon de capturer audio + vidéo ensemble avec MediaRecorder
+  const canvasStream = canvas.captureStream(30)
+
+  // Combine avec l'audio via Web Audio API (capture le flux audio du <audio>)
+  let combinedStream = canvasStream
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const source = audioCtx.createMediaElementSource(audioEl)
+    const dest = audioCtx.createMediaStreamDestination()
+    source.connect(dest)
+    // Connect aussi au destination audio normal pour qu'on entende pendant le rendu
+    source.connect(audioCtx.destination)
+
+    const audioTracks = dest.stream.getAudioTracks()
+    if (audioTracks.length > 0) {
+      combinedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...audioTracks,
+      ])
+      addLog('✓ Audio capturé', 'success')
+    } else {
+      addLog('⚠ Pas de piste audio capturée', 'error')
+    }
+  } catch (e) {
+    addLog(`⚠ Audio non capturé : ${e.message}`, 'error')
+    // On continue sans audio plutôt que de tout crasher
+  }
+
+  // Configure MediaRecorder sur le stream combiné
   const mimeType = MediaRecorder.isTypeSupported('video/mp4')
     ? 'video/mp4'
     : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9'
       : 'video/webm'
 
-  const recorder = new MediaRecorder(stream, {
+  const recorder = new MediaRecorder(combinedStream, {
     mimeType,
     videoBitsPerSecond: 5_000_000,
+    audioBitsPerSecond: 192_000,
   })
 
   const chunks = []
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data)
   }
-
-  // Charge l'audio pour le jouer en sync
-  const audioUrl = URL.createObjectURL(audioFile)
-  const audioEl = new Audio(audioUrl)
-  audioEl.muted = false
 
   // Calcule le temps total
   const totalDuration = timeline.reduce((sum, seg) => sum + seg.duration, 0)
