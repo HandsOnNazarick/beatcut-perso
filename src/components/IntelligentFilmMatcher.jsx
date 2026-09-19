@@ -9,23 +9,47 @@ export default function IntelligentFilmMatcher({
   onSelectClips,
 }) {
   const [enabled, setEnabled] = useState(false)
-  const [step, setStep] = useState('idle') // idle, transcribing, matching, finding, ranking, done
+  const [step, setStep] = useState('idle')
   const [progress, setProgress] = useState(0)
   const [logs, setLogs] = useState([])
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [proxyUrl, setProxyUrlState] = useState('')
+  const [proxyInput, setProxyInput] = useState('')
   const [isWhisperCached, setIsWhisperCached] = useState(false)
 
-  // Clés API
+  // Clés API (legacy / fallback)
   const [showKeys, setShowKeys] = useState(false)
   const [osKey, setOsKey] = useState(localStorage.getItem('beatcut:os_key') || '')
   const [ytKey, setYtKey] = useState(localStorage.getItem('beatcut:yt_key') || '')
   const [orKey, setOrKey] = useState(localStorage.getItem('beatcut:or_key') || '')
 
-  const isOSConfigured = !!osKey
-  const isYTConfigured = !!ytKey
-  const isORConfigured = !!orKey
+  const useProxy = !!proxyUrl
+  const isOSConfigured = useProxy || !!osKey
+  const isYTConfigured = useProxy || !!ytKey
+  const isORConfigured = useProxy || !!orKey
   const allKeysConfigured = isOSConfigured && isYTConfigured && isORConfigured
+
+  // Charge le proxy URL au mount
+  useEffect(() => {
+    const url = localStorage.getItem('beatcut:proxy_url') || ''
+    setProxyUrlState(url)
+    setProxyInput(url)
+  }, [])
+
+  const saveProxy = () => {
+    const url = proxyInput.trim().replace(/\/+$/, '') // trim trailing slash
+    if (url) {
+      localStorage.setItem('beatcut:proxy_url', url)
+      setProxyUrlState(url)
+    }
+  }
+
+  const clearProxy = () => {
+    localStorage.removeItem('beatcut:proxy_url')
+    setProxyUrlState('')
+    setProxyInput('')
+  }
 
   const addLog = (msg, type = '') => {
     setLogs((prev) => [...prev.slice(-30), { msg, type, time: Date.now() }])
@@ -105,18 +129,28 @@ export default function IntelligentFilmMatcher({
 
             if (!movieTitle) continue
 
-            // Télécharge et parse le sous-titre
+            // Télécharge et parse le sous-titre (via proxy ou direct)
             try {
-              const dl = await fetch('https://api.opensubtitles.com/api/v1/download', {
-                method: 'POST',
-                headers: {
-                  'Api-Key': osKey,
-                  'User-Agent': 'BeatCutPerso v0.1',
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ file_id: sub.attributes?.files?.[0]?.file_id }),
-              })
-              const dlData = await dl.json()
+              let dlData
+              if (useProxy) {
+                const dl = await fetch(`${proxyUrl}/subtitles/download`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ file_id: sub.attributes?.files?.[0]?.file_id }),
+                })
+                dlData = await dl.json()
+              } else {
+                const dl = await fetch('https://api.opensubtitles.com/api/v1/download', {
+                  method: 'POST',
+                  headers: {
+                    'Api-Key': osKey,
+                    'User-Agent': 'BeatCutPerso v0.1',
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ file_id: sub.attributes?.files?.[0]?.file_id }),
+                })
+                dlData = await dl.json()
+              }
 
               if (dlData.link) {
                 const srtRes = await fetch(dlData.link)
@@ -270,14 +304,50 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
         </button>
       </div>
 
-      {/* Configuration clés API */}
+      {/* Configuration proxy (recommandé) ou clés API */}
       <div style={{ marginBottom: 16 }}>
+        {/* Mode proxy */}
+        <div style={{
+          padding: 12,
+          background: useProxy ? 'rgba(74, 222, 128, 0.1)' : 'var(--bg-tertiary)',
+          borderRadius: 8,
+          marginBottom: 12,
+          border: useProxy ? '1px solid var(--success)' : '1px solid var(--border)',
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            🚀 Mode Proxy
+            <span className="tag auto">Recommandé</span>
+            {useProxy && <span style={{ color: 'var(--success)', fontSize: 11 }}>✓ Actif</span>}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Si tu as déployé le proxy Cloudflare Workers, colle son URL ici. Zéro clé API nécessaire.
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="text"
+              value={proxyInput}
+              onChange={(e) => setProxyInput(e.target.value)}
+              placeholder="https://beatcut-ia-proxy.xxx.workers.dev"
+              style={{ flex: 1, fontSize: 11 }}
+            />
+            {useProxy ? (
+              <button className="btn btn-secondary" onClick={clearProxy} style={{ fontSize: 11, padding: '8px 12px' }}>
+                ✕
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={saveProxy} style={{ fontSize: 11, padding: '8px 12px' }}>
+                OK
+              </button>
+            )}
+          </div>
+        </div>
+
         <button
           className="btn btn-secondary"
           onClick={() => setShowKeys(!showKeys)}
           style={{ width: '100%', fontSize: 12 }}
         >
-          {showKeys ? '▼' : '▶'} Clés API {allKeysConfigured ? '✓ configurées' : '⚠ manquantes'}
+          {showKeys ? '▼' : '▶'} {useProxy ? 'Voir les clés manuelles (info)' : `Clés API manuelles ${allKeysConfigured ? '✓' : ''}`}
         </button>
 
         {showKeys && (
@@ -396,21 +466,31 @@ Réponds en JSON : {"selections":[{"index":N,"reason":"..."}]}`)
 
       {!allKeysConfigured && step === 'idle' && (
         <div className="empty-state" style={{ padding: 16 }}>
-          Configure tes 3 clés API pour activer l'IA.
+          {useProxy ? (
+            'Le proxy est configuré mais injoignable. Vérifie l\'URL.'
+          ) : (
+            'Configure le proxy (recommandé) OU tes 3 clés API.'
+          )}
         </div>
       )}
 
       {allKeysConfigured && step === 'idle' && (
-        <button
-          className="btn btn-primary btn-large"
-          onClick={runPipeline}
-          style={{ width: '100%' }}
-        >
-          🤖 Lancer l'IA
-          <div style={{ fontSize: 11, fontWeight: 400, marginTop: 4 }}>
-            Whisper + OpenSubtitles ({isWhisperCached() ? 'cached' : '~75 Mo à télécharger'})
+        <>
+          <button
+            className="btn btn-primary btn-large"
+            onClick={runPipeline}
+            style={{ width: '100%' }}
+          >
+            🤖 Lancer l'IA
+            <div style={{ fontSize: 11, fontWeight: 400, marginTop: 4 }}>
+              Whisper {isWhisperCached ? '(cached)' : '+ ~80 Mo 1ère fois'} · via {useProxy ? 'proxy' : 'clés directes'}
+            </div>
+          </button>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
+            ⚠️ Recommandé sur Chrome/Firefox desktop.<br />
+            iOS Safari peut struggle avec Whisper (80 Mo ONNX Runtime).
           </div>
-        </button>
+        </>
       )}
 
       {(step === 'transcribing' || step === 'matching' || step === 'finding' || step === 'ranking') && (

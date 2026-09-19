@@ -1,10 +1,36 @@
-// === Module LLM (OpenRouter) ===
-// Utilise un modèle gratuit (Llama 3.1 8B) pour le tri final des plans
-// OpenRouter sert de proxy multi-provider avec une seule clé API
+// === Module LLM (via proxy BeatCut ou OpenRouter direct) ===
+// Si une URL de proxy est configurée (via ?proxy=... ou localStorage),
+// toutes les requêtes passent par le proxy qui détient les clés.
+// Sinon, fallback sur OpenRouter direct avec clé utilisateur.
 
-const OR_BASE = 'https://openrouter.ai/api/v1'
+const DEFAULT_PROXY_KEY = 'beatcut:proxy_url'
+
+export function getProxyUrl() {
+  // Priorité : URL passée en query string > localStorage
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get('proxy')
+  if (fromUrl) {
+    localStorage.setItem(DEFAULT_PROXY_KEY, fromUrl)
+    return fromUrl
+  }
+  return localStorage.getItem(DEFAULT_PROXY_KEY) || ''
+}
+
+export function setProxyUrl(url) {
+  localStorage.setItem(DEFAULT_PROXY_KEY, url)
+}
+
+export function clearProxyUrl() {
+  localStorage.removeItem(DEFAULT_PROXY_KEY)
+}
+
+export function isProxyMode() {
+  return !!getProxyUrl()
+}
 
 export function getOpenRouterApiKey() {
+  // En mode proxy, pas besoin de clé
+  if (isProxyMode()) return 'proxy'
   return localStorage.getItem('beatcut:or_key') || ''
 }
 
@@ -13,6 +39,7 @@ export function setOpenRouterApiKey(key) {
 }
 
 export function isOpenRouterApiKeyConfigured() {
+  if (isProxyMode()) return true
   return !!getOpenRouterApiKey()
 }
 
@@ -47,10 +74,34 @@ export function setSelectedModel(modelId) {
 
 /**
  * Appel LLM avec un prompt simple (chat completion)
+ * Passe par le proxy si configuré, sinon OpenRouter direct
  */
 export async function callLLM(prompt, options = {}) {
+  const proxyUrl = getProxyUrl()
+
+  if (proxyUrl) {
+    // Mode proxy : on envoie tout au worker qui détient les clés
+    const res = await fetch(`${proxyUrl}/llm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: options.messages || [{ role: 'user', content: prompt }],
+        model: options.model,
+        max_tokens: options.max_tokens || 1000,
+        temperature: options.temperature ?? 0.7,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Proxy ${res.status}: ${err.slice(0, 300)}`)
+    }
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content || ''
+  }
+
+  // Mode direct (fallback)
   const key = getOpenRouterApiKey()
-  if (!key) throw new Error('Clé OpenRouter manquante')
+  if (!key || key === 'proxy') throw new Error('Clé OpenRouter manquante (ou configure un proxy)')
 
   const model = options.model || getSelectedModel()
 

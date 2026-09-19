@@ -1,14 +1,20 @@
-// === Module YouTube search ===
-// Recherche de scènes de films via YouTube Data API v3
-// https://developers.google.com/youtube/v3
-//
-// IMPORTANT: on n'utilise PAS youtube-dl côté client (illégal + bloqué)
-// On génère des liens watch directs vers les timestamps trouvés.
-// L'utilisateur regarde sur YouTube ou screen-record la scène.
+// === Module YouTube search (via proxy ou direct) ===
 
 const YT_BASE = 'https://www.googleapis.com/youtube/v3'
+const PROXY_KEY = 'beatcut:proxy_url'
+
+export function getProxyUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get('proxy')
+  if (fromUrl) {
+    localStorage.setItem(PROXY_KEY, fromUrl)
+    return fromUrl
+  }
+  return localStorage.getItem(PROXY_KEY) || ''
+}
 
 export function getYouTubeApiKey() {
+  if (getProxyUrl()) return 'proxy'
   return localStorage.getItem('beatcut:yt_key') || ''
 }
 
@@ -17,16 +23,42 @@ export function setYouTubeApiKey(key) {
 }
 
 export function isYouTubeApiKeyConfigured() {
+  if (getProxyUrl()) return true
   return !!getYouTubeApiKey()
 }
 
 /**
- * Recherche une vidéo YouTube correspondant à "film title scene quote"
- * Retourne l'ID de la vidéo et les métadonnées
+ * Recherche une vidéo YouTube
+ * Passe par le proxy si configuré
  */
 export async function searchVideo(query, maxResults = 3) {
+  const proxyUrl = getProxyUrl()
+
+  if (proxyUrl) {
+    const params = new URLSearchParams({
+      query,
+      maxResults: String(maxResults),
+    })
+    const res = await fetch(`${proxyUrl}/youtube?${params}`)
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Proxy YouTube ${res.status}: ${err.slice(0, 200)}`)
+    }
+    const data = await res.json()
+    return (data.items || []).map((item) => ({
+      id: item.id.videoId,
+      title: item.snippet.title,
+      channel: item.snippet.channelTitle,
+      description: item.snippet.description,
+      thumbnail: item.snippet.thumbnails?.medium?.url,
+      publishedAt: item.snippet.publishedAt,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+      embedUrl: `https://www.youtube.com/embed/${item.id.videoId}`,
+    }))
+  }
+
   const key = getYouTubeApiKey()
-  if (!key) throw new Error('Clé YouTube manquante')
+  if (!key || key === 'proxy') throw new Error('Clé YouTube manquante (ou configure un proxy)')
 
   const params = new URLSearchParams({
     part: 'snippet',

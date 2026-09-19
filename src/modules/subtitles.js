@@ -1,17 +1,20 @@
-// === Module OpenSubtitles API ===
-// Recherche de sous-titres via l'API REST d'OpenSubtitles
-// https://opensubtitles.stoplight.io/docs/opensubtitles-api
-//
-// IMPORTANT: OpenSubtitles a changé ses CGV en 2023.
-// L'API gratuite (v1) nécessite une clé API + User-Agent identifiable.
-// Alternative légale : on utilise leur endpoint REST avec une clé gratuite.
-//
-// Note: pour les recherches de matching de phrases, on télécharge les .srt
-// localement et on les parse. Pas de streaming massif.
+// === Module OpenSubtitles API (via proxy ou direct) ===
 
 const OS_BASE = 'https://api.opensubtitles.com/api/v1'
+const PROXY_KEY = 'beatcut:proxy_url'
+
+export function getProxyUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get('proxy')
+  if (fromUrl) {
+    localStorage.setItem(PROXY_KEY, fromUrl)
+    return fromUrl
+  }
+  return localStorage.getItem(PROXY_KEY) || ''
+}
 
 export function getOSApiKey() {
+  if (getProxyUrl()) return 'proxy'
   return localStorage.getItem('beatcut:os_key') || ''
 }
 
@@ -20,15 +23,32 @@ export function setOSApiKey(key) {
 }
 
 export function isOSApiKeyConfigured() {
+  if (getProxyUrl()) return true
   return !!getOSApiKey()
 }
 
 /**
- * Recherche des sous-titres par ID IMDB ou par texte
+ * Recherche des sous-titres par texte
+ * Passe par le proxy si configuré, sinon OpenSubtitles direct
  */
 export async function searchSubtitles(query, languages = ['fre', 'eng']) {
+  const proxyUrl = getProxyUrl()
+
+  if (proxyUrl) {
+    const params = new URLSearchParams({
+      query,
+      languages: languages.join(','),
+    })
+    const res = await fetch(`${proxyUrl}/subtitles?${params}`)
+    if (!res.ok) {
+      const txt = await res.text()
+      throw new Error(`Proxy subtitles ${res.status}: ${txt.slice(0, 200)}`)
+    }
+    return res.json()
+  }
+
   const key = getOSApiKey()
-  if (!key) throw new Error('Clé OpenSubtitles manquante')
+  if (!key || key === 'proxy') throw new Error('Clé OpenSubtitles manquante (ou configure un proxy)')
 
   const params = new URLSearchParams({
     query,
@@ -49,7 +69,6 @@ export async function searchSubtitles(query, languages = ['fre', 'eng']) {
   }
   return res.json()
 }
-
 /**
  * Recherche par hash de fichier (plus précis)
  */
