@@ -242,8 +242,10 @@ function createPlaceholderVideo(clip) {
 
   let hue = 0
   let frame = 0
+  let animating = false
 
   function draw() {
+    if (!animating) return
     hue = (hue + 2) % 360
     frame++
 
@@ -270,24 +272,52 @@ function createPlaceholderVideo(clip) {
     requestAnimationFrame(draw)
   }
 
-  draw()
-
-  // Utilise captureStream pour le transformer en vidéo
-  const stream = canvas.captureStream(30)
+  // Crée une balise vidéo qui affiche le canvas via captureStream
+  // Note : pas de properties readonly ici, on les définit comme getters simples
   const video = document.createElement('video')
-  video.srcObject = stream
   video.muted = true
   video.playsInline = true
-  video.duration = 999999 // durée indéterminée
+  video.autoplay = true
 
-  // Hack pour que ça marche comme une vidéo
-  Object.defineProperty(video, 'videoWidth', { get: () => canvas.width })
-  Object.defineProperty(video, 'videoHeight', { get: () => canvas.height })
+  // Stocker width/height comme propriétés normales (pas Object.defineProperty)
+  // pour permettre la lecture/écriture sans crash
+  Object.defineProperty(video, 'videoWidth', {
+    configurable: true,
+    get: () => canvas.width,
+  })
+  Object.defineProperty(video, 'videoHeight', {
+    configurable: true,
+    get: () => canvas.height,
+  })
 
-  // Méthode de lecture manuelle
-  video.play = () => Promise.resolve()
-  video.pause = () => {}
-  video.currentTime = 0
+  // Méthodes play/pause qui contrôlent l'animation canvas
+  const originalPlay = video.play.bind(video)
+  video.play = function () {
+    animating = true
+    draw()
+    return originalPlay().catch(() => {
+      // iOS peut bloquer autoplay, on s'en fout car le canvas anime déjà
+      return Promise.resolve()
+    })
+  }
+  video.pause = function () {
+    animating = false
+  }
+
+  // currentTime : on le laisse comme setter natif (pas de override)
+  // duration : on met une grande valeur pour ne pas stopper
+  Object.defineProperty(video, 'duration', {
+    configurable: true,
+    get: () => 999999,
+  })
+
+  // Attache le stream du canvas comme source vidéo
+  try {
+    const stream = canvas.captureStream(30)
+    video.srcObject = stream
+  } catch (e) {
+    console.warn('captureStream failed for placeholder', e)
+  }
 
   return video
 }
