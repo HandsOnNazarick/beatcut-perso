@@ -1,6 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { exportVideo } from '../modules/export.js'
+import { exportVideoCanvas } from '../modules/export-canvas.js'
 import { buildBeatSyncTimeline } from '../modules/beatsync.js'
+import { isFFmpegSupported, getBrowserInfo, getExportMethod } from '../modules/compat.js'
 
 export default function ExportPanel({
   audioFile,
@@ -18,6 +20,16 @@ export default function ExportPanel({
   const [watermark, setWatermark] = useState('')
   const [duration30s, setDuration30s] = useState(true)
   const [aspectRatio, setAspectRatio] = useState('9:16')
+  const [compat, setCompat] = useState(null)
+
+  useEffect(() => {
+    const info = getBrowserInfo()
+    setCompat({
+      ...info,
+      ffmpegSupported: isFFmpegSupported(),
+      method: getExportMethod(),
+    })
+  }, [])
 
   const canExport = audioFile && bpm && selectedClips.length > 0 && !exporting
 
@@ -37,40 +49,59 @@ export default function ExportPanel({
       const exportDuration = duration30s ? Math.min(30, duration) : duration
       const start = 0
 
-      // Construit la timeline beat-sync
       const timeline = buildBeatSyncTimeline({
         audioDuration: exportDuration,
         bpm,
         startTime: start,
         endTime: exportDuration,
         clipUrls: selectedClips.map((c) => c.url),
-        beatsPerCut: 2, // 1 cut par 2 beats = rythme naturel
+        beatsPerCut: 2,
       })
 
       addLog(`Timeline générée : ${timeline.length} segments`, 'success')
 
       const [w, h] = aspectRatio === '9:16' ? [1080, 1920] : aspectRatio === '1:1' ? [1080, 1080] : [1920, 1080]
 
-      const blob = await exportVideo({
-        audioFile,
-        audioStart: start,
-        audioDuration: exportDuration,
-        clips: selectedClips.map((c) => ({ url: c.url, duration: c.duration })),
-        timeline,
-        width: w,
-        height: h,
-        watermark,
-        onProgress: setProgress,
-        onLog: addLog,
-      })
+      let blob
+      const method = getExportMethod()
+
+      if (method === 'ffmpeg') {
+        addLog('Méthode : ffmpeg.wasm (full quality)')
+        blob = await exportVideo({
+          audioFile,
+          audioStart: start,
+          audioDuration: exportDuration,
+          clips: selectedClips.map((c) => ({ url: c.url, duration: c.duration })),
+          timeline,
+          width: w,
+          height: h,
+          watermark,
+          onProgress: setProgress,
+          onLog: addLog,
+        })
+      } else {
+        addLog('Méthode : Canvas + MediaRecorder (compatible iOS)')
+        blob = await exportVideoCanvas({
+          audioFile,
+          audioStart: start,
+          audioDuration: exportDuration,
+          clips: selectedClips.map((c) => ({ url: c.url, duration: c.duration })),
+          timeline,
+          width: w,
+          height: h,
+          watermark,
+          onProgress: setProgress,
+          onLog: addLog,
+        })
+      }
 
       const url = URL.createObjectURL(blob)
       setOutputUrl(url)
-      addLog('✓ Export terminé !', 'success')
+      addLog(`✓ Vidéo prête (${(blob.size / 1024 / 1024).toFixed(1)} Mo)`, 'success')
     } catch (e) {
       console.error(e)
       setError(e.message)
-      addLog(`Erreur : ${e.message}`, 'error')
+      addLog(`Erreur : ${e.message || e}`, 'error')
     } finally {
       setExporting(false)
     }
@@ -83,10 +114,31 @@ export default function ExportPanel({
           <span className="section-number">4</span>
           Export
         </div>
-        {canExport && (
-          <span className="tag">{selectedClips.length} clip{selectedClips.length > 1 ? 's' : ''}</span>
-        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {compat && (
+            <span className={`tag ${compat.ffmpegSupported ? 'auto' : 'manual'}`}>
+              {compat.browser} · {compat.ffmpegSupported ? 'ffmpeg' : 'canvas'}
+            </span>
+          )}
+          {canExport && <span className="tag">{selectedClips.length} clip{selectedClips.length > 1 ? 's' : ''}</span>}
+        </div>
       </div>
+
+      {compat && !compat.ffmpegSupported && (
+        <div style={{
+          padding: 12,
+          background: 'rgba(251, 191, 36, 0.1)',
+          border: '1px solid rgba(251, 191, 36, 0.3)',
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+        }}>
+          ⚠️ <strong>{compat.browser}</strong> ne supporte pas ffmpeg.wasm (limitation navigateur).
+          Export via Canvas en temps réel — qualité moindre, durée = temps réel (1 min de vidéo = 1 min de rendu).
+          Pour full quality, utilise Chrome/Firefox sur desktop.
+        </div>
+      )}
 
       <div className="export-options">
         <div className="export-option">
@@ -115,7 +167,7 @@ export default function ExportPanel({
           />
         </div>
         <div className="export-option">
-          <label>Thème détecté</label>
+          <label>Thème</label>
           <input
             type="text"
             value={selectedFilms[0]?.title || '—'}
@@ -175,15 +227,16 @@ export default function ExportPanel({
           <video
             src={outputUrl}
             controls
+            playsInline
             style={{ width: '100%', maxWidth: 360, borderRadius: 8, display: 'block', margin: '0 auto' }}
           />
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <a
               href={outputUrl}
               download={`beatcut-${Date.now()}.mp4`}
               className="btn btn-primary"
             >
-              ⬇ Télécharger MP4
+              ⬇ Télécharger
             </a>
             <button
               className="btn btn-secondary"
