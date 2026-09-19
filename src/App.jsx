@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import Dropzone from './components/Dropzone.jsx'
 import AudioAnalyzer from './components/AudioAnalyzer.jsx'
-import ArchiveFilmSelector from './components/ArchiveFilmSelector.jsx'
 import ClipSelector from './components/ClipSelector.jsx'
 import ExportPanel from './components/ExportPanel.jsx'
 
@@ -11,7 +10,6 @@ export default function App() {
   const [bpmSource, setBpmSource] = useState(null)
   const [beats, setBeats] = useState([])
   const [duration, setDuration] = useState(0)
-  const [selectedFilms, setSelectedFilms] = useState([])
   const [selectedClips, setSelectedClips] = useState([])
   const [theme, setTheme] = useState(null)
 
@@ -20,14 +18,12 @@ export default function App() {
     setBpm(null)
     setBpmSource(null)
     setBeats([])
-    setSelectedFilms([])
     setSelectedClips([])
   }
 
   const handleBPMChange = (newBPM, source) => {
     setBpm(newBPM)
     setBpmSource(source)
-    // Deviner un mood basique depuis le BPM (heuristique simple)
     if (!theme) {
       let guess = ''
       if (newBPM < 90) guess = 'mélancolique'
@@ -36,31 +32,6 @@ export default function App() {
       else if (newBPM < 150) guess = 'urbain'
       else guess = 'néon'
       setTheme(guess)
-    }
-  }
-
-  const handleSelectFilm = (filmWithVideo) => {
-    // Archive.org renvoie directement le fichier vidéo à utiliser comme clip
-    // On l'ajoute directement à la sélection de clips (étape 3)
-    const clipFromFilm = {
-      id: `archive-${filmWithVideo.id}-${filmWithVideo.videoUrl.split('/').pop()}`,
-      title: `${filmWithFilm.title} — ${filmWithVideo.videoUrl.split('/').pop()}`,
-      url: filmWithVideo.videoUrl,
-      duration: filmWithVideo.duration || 60,
-      mood: filmWithVideo.mood || 'film',
-      source: 'Archive.org',
-    }
-
-    setSelectedFilms((prev) => [...prev, filmWithVideo])
-    setSelectedClips((prev) => {
-      const exists = prev.some((c) => c.id === clipFromFilm.id)
-      if (exists) return prev
-      return [...prev, clipFromFilm]
-    })
-
-    // Met à jour le thème si on a un mood depuis le film
-    if (filmWithVideo.mood) {
-      setTheme(filmWithVideo.mood)
     }
   }
 
@@ -77,7 +48,6 @@ export default function App() {
     setBpm(null)
     setBpmSource(null)
     setBeats([])
-    setSelectedFilms([])
     setSelectedClips([])
     setTheme(null)
     setDuration(0)
@@ -110,7 +80,7 @@ export default function App() {
                 Transforme tes sons en vidéos calées sur le beat
               </div>
               <div style={{ fontSize: 12 }}>
-                Drop ton MP3 → BPM auto → choisis ton film (Archive.org, libre) ou tes clips → exporte en 9:16
+                Drop ton MP3 → BPM auto → choisis tes clips (style ciné) → exporte en 9:16
               </div>
             </div>
           </div>
@@ -122,13 +92,6 @@ export default function App() {
                 onBPMChange={handleBPMChange}
                 onBeatsChange={setBeats}
                 onDurationChange={setDuration}
-              />
-            </section>
-
-            <section className="section">
-              <ArchiveFilmSelector
-                selectedFilms={selectedFilms}
-                onSelect={handleSelectFilm}
               />
             </section>
 
@@ -147,7 +110,6 @@ export default function App() {
                 beats={beats}
                 duration={duration}
                 selectedClips={selectedClips}
-                selectedFilms={selectedFilms}
               />
             </section>
           </>

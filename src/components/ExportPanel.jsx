@@ -10,7 +10,6 @@ export default function ExportPanel({
   beats,
   duration,
   selectedClips,
-  selectedFilms,
 }) {
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -167,10 +166,10 @@ export default function ExportPanel({
           />
         </div>
         <div className="export-option">
-          <label>Thème</label>
+          <label>BPM</label>
           <input
             type="text"
-            value={selectedFilms[0]?.title || '—'}
+            value={bpm || '—'}
             readOnly
             style={{ color: 'var(--text-muted)' }}
           />
