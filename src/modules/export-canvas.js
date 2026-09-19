@@ -150,23 +150,55 @@ export async function exportVideoCanvas(opts) {
           ctx.fillRect(0, 0, width, height)
 
           if (videoEntry.isPlaceholder) {
-            // Animation dégradée basée sur le hash du clip
+            // Animation cinématique plus travaillée pour les placeholders
             placeholderHue = (placeholderHue + 3) % 360
             const hue = (placeholderHue + (seg.clipIndex * 60)) % 360
+            const time = (performance.now() - startTime) / 1000
+
+            // Multi-couches pour effet cinéma
+            // 1. Gradient de fond qui pulse
+            const breath = Math.sin(time * 0.5 + seg.clipIndex) * 0.1 + 0.9
             const gradient = ctx.createLinearGradient(0, 0, width, height)
-            gradient.addColorStop(0, `hsl(${hue}, 70%, 30%)`)
-            gradient.addColorStop(0.5, `hsl(${(hue + 30) % 360}, 70%, 20%)`)
-            gradient.addColorStop(1, `hsl(${(hue + 60) % 360}, 70%, 10%)`)
+            gradient.addColorStop(0, `hsl(${hue}, 70%, ${22 * breath}%)`)
+            gradient.addColorStop(0.5, `hsl(${(hue + 30) % 360}, 60%, ${18 * breath}%)`)
+            gradient.addColorStop(1, `hsl(${(hue + 60) % 360}, 70%, ${12 * breath}%)`)
             ctx.fillStyle = gradient
             ctx.fillRect(0, 0, width, height)
 
-            // Texte indicatif
-            ctx.font = 'bold 48px sans-serif'
-            ctx.fillStyle = 'rgba(255,255,255,0.4)'
+            // 2. Vagues animées style "ocean" ou "dunes"
+            ctx.beginPath()
+            ctx.moveTo(0, height * 0.5)
+            for (let x = 0; x <= width; x += 20) {
+              const wave = Math.sin(x * 0.003 + time * 0.8) * 80
+              const wave2 = Math.sin(x * 0.007 - time * 0.5) * 40
+              ctx.lineTo(x, height * 0.5 + wave + wave2)
+            }
+            ctx.lineTo(width, height)
+            ctx.lineTo(0, height)
+            ctx.closePath()
+            ctx.fillStyle = `hsla(${(hue + 180) % 360}, 70%, 35%, 0.5)`
+            ctx.fill()
+
+            // 3. Particules flottantes
+            for (let p = 0; p < 30; p++) {
+              const px = (Math.sin(time * 0.3 + p * 1.7) * 0.5 + 0.5) * width
+              const py = (Math.cos(time * 0.4 + p * 2.3) * 0.5 + 0.5) * height * 0.7
+              const ps = 2 + Math.sin(time + p) * 2
+              ctx.fillStyle = `hsla(${(hue + 90) % 360}, 80%, 70%, 0.6)`
+              ctx.beginPath()
+              ctx.arc(px, py, ps, 0, Math.PI * 2)
+              ctx.fill()
+            }
+
+            // 4. Texte indicatif discret
+            ctx.font = 'bold 56px sans-serif'
+            ctx.fillStyle = 'rgba(255,255,255,0.5)'
             ctx.textAlign = 'center'
-            ctx.fillText(`Clip ${seg.clipIndex + 1}`, width / 2, height / 2)
-            ctx.font = '24px sans-serif'
-            ctx.fillText('(CORS bloqué — placeholder)', width / 2, height / 2 + 60)
+            ctx.fillText(`Clip ${seg.clipIndex + 1}`, width / 2, height * 0.45)
+            ctx.font = '20px sans-serif'
+            ctx.fillStyle = 'rgba(255,255,255,0.3)'
+            ctx.fillText('Upload tes clips dans "Mes clips" pour', width / 2, height * 0.55)
+            ctx.fillText('remplacer ce placeholder', width / 2, height * 0.58)
           } else if (video.videoWidth > 0) {
             // Dessine le clip vidéo redimensionné (cover)
             const vw = video.videoWidth

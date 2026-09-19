@@ -184,6 +184,24 @@ export default function ExportPanel({
         </div>
       )}
 
+      {canExport && compat && !compat.ffmpegSupported && selectedClips.some((c) => c.url?.startsWith('http')) && (
+        <div style={{
+          padding: 10,
+          marginBottom: 12,
+          background: 'rgba(251, 191, 36, 0.1)',
+          border: '1px solid rgba(251, 191, 36, 0.4)',
+          borderRadius: 8,
+          fontSize: 11,
+          color: 'var(--text-secondary)',
+          lineHeight: 1.4,
+        }}>
+          ⚠️ <strong>iOS détecté</strong> : les clips Pexels distants ne chargeront pas (CORS bloqué par Safari).
+          <br />
+          ➡️ Pour de vrais visuels : upload tes propres clips via l'onglet "📁 Mes clips".
+          Sinon, des animations cinématiques seront générées à la place.
+        </div>
+      )}
+
       {canExport && (
         <button
           className="btn btn-primary btn-large"
