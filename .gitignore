@@ -1,0 +1,28 @@
+# Cache
+node_modules
+dist
+dist-ssr
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+
+# FFMPEG.wasm core
+public/ffmpeg-core.js
+public/ffmpeg-core.wasm
