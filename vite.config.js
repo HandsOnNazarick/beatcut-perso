@@ -18,6 +18,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+    // ffmpeg.wasm a son propre système de workers + assets WASM, ne pas pré-bundler
+    // wavesurfer.js charge des modules internes complexes, mieux en exclusion
+    exclude: [
+      '@ffmpeg/ffmpeg',
+      '@ffmpeg/util',
+      'wavesurfer.js',
+    ],
   },
 })

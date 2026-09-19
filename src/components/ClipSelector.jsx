@@ -97,7 +97,7 @@ export default function ClipSelector({ selectedClips, onToggle, theme }) {
         <>
           <Dropzone
             onFile={handleCustomUpload}
-            accept="video/*"
+            kind="video"
             icon="🎬"
             hint="MP4, MOV, WebM — tes rushs perso"
           />
